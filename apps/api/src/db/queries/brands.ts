@@ -86,3 +86,11 @@ export async function updateBrand(
   );
   return result.rows[0] ?? null;
 }
+
+export async function deleteBrand(id: string, ownerUserId: string): Promise<boolean> {
+  const result = await query(
+    "DELETE FROM brands WHERE id = $1 AND owner_user_id = $2 RETURNING id",
+    [id, ownerUserId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
