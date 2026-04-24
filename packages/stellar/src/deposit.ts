@@ -44,21 +44,33 @@ export async function fetchDepositEvents(
   const events: DepositEvent[] = [];
 
   for (const event of response.events) {
-    const txMeta = await rpc.getTransaction(event.txHash);
-    if (txMeta.status !== SorobanRpc.Api.GetTransactionStatus.SUCCESS) continue;
+    try {
+      const txMeta = await rpc.getTransaction(event.txHash);
+      if (txMeta.status !== SorobanRpc.Api.GetTransactionStatus.SUCCESS) {
+        console.warn(`Skipping unsuccessful transaction: ${event.txHash}`, { status: txMeta.status });
+        continue;
+      }
 
-    const tx = txMeta.returnValue;
-    const memo = (txMeta as any).memo?.text ?? "";
-    const amount = event.value?.toString() ?? "0";
+      if (!event.ledgerClosedAt) {
+        console.warn(`Skipping event with missing ledgerClosedAt: ${event.txHash}`);
+        continue;
+      }
 
-    events.push({
-      txHash: event.txHash,
-      amount,
-      memo,
-      to: hotWalletAddress,
-      ledger: event.ledger,
-      createdAt: new Date(event.ledgerClosedAt).toISOString(),
-    });
+      const memo = (txMeta as any).memo?.text ?? "";
+      const amount = event.value?.toString() ?? "0";
+
+      events.push({
+        txHash: event.txHash,
+        amount,
+        memo,
+        to: hotWalletAddress,
+        ledger: event.ledger,
+        createdAt: new Date(event.ledgerClosedAt).toISOString(),
+      });
+    } catch (err) {
+      console.warn(`Error processing deposit event ${event.txHash}:`, err);
+      continue;
+    }
   }
 
   return {

@@ -39,3 +39,13 @@ export const uploadLimiter = rateLimit({
   legacyHeaders: false,
   store: new RedisStore({ sendCommand: (...args: string[]) => redis.call(...args) as any }),
 });
+
+// Webhook endpoints: 1000 req/hour (higher limit as it is internal-to-internal)
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 1000,
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  store: new RedisStore({ sendCommand: (...args: string[]) => redis.call(...args) as any }),
+});
+

@@ -10,7 +10,11 @@ import { rpc as SorobanRpc } from "@stellar/stellar-sdk";
 import { STELLAR_NETWORKS, type NetworkName } from "./constants";
 
 export function getNetwork(name: NetworkName = "testnet") {
-  return STELLAR_NETWORKS[name];
+  const config = STELLAR_NETWORKS[name];
+  if (!config) {
+    throw new Error(`Invalid network name: ${name}`);
+  }
+  return config;
 }
 
 export function getHorizonServer(network: NetworkName = "testnet"): Horizon.Server {
