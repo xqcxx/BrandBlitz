@@ -45,6 +45,8 @@ registerRoutes(app);
 // ── Global error handler (Express 5 — catches async throws automatically) ──
 app.use(errorHandler);
 
+export { app };
+
 // ── Start ──────────────────────────────────────────────────────────────────
 async function start(): Promise<void> {
   await connectDb();
@@ -80,7 +82,9 @@ async function start(): Promise<void> {
   process.on("SIGINT", () => shutdown("SIGINT"));
 }
 
-start().catch((err) => {
-  logger.error("Failed to start API", { err });
-  process.exit(1);
-});
+if (process.env.NODE_ENV !== "test") {
+  start().catch((err) => {
+    logger.error("Failed to start API", { err });
+    process.exit(1);
+  });
+}

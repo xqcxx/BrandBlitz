@@ -1,11 +1,17 @@
 import { Router } from "express";
 import { z } from "zod";
 import crypto from "crypto";
-import { findUserById, markPhoneVerified, updateUserWallet } from "../db/queries/users";
+import {
+  findUserById,
+  markPhoneVerified,
+  updateUserWallet,
+  getUserPublicProfileByUsername,
+} from "../db/queries/users";
 import { sendVerificationCode, checkVerificationCode } from "../services/phone";
 import { authenticate } from "../middleware/authenticate";
 import { createError } from "../middleware/error";
 import { redis } from "../lib/redis";
+import { apiLimiter } from "../middleware/rate-limit";
 
 const router = Router();
 
@@ -20,8 +26,31 @@ router.get("/me", authenticate, async (req, res) => {
 });
 
 /**
+ * GET /users/profile/:username
+ * Public profile — display name, stats. No auth required.
+ */
+router.get("/profile/:username", apiLimiter, async (req, res) => {
+  const { username } = z.object({ username: z.string() }).parse(req.params);
+
+  const user = await getUserPublicProfileByUsername(username);
+  if (!user) throw createError("User not found", 404);
+
+  res.json({
+    user: {
+      displayName: user.display_name,
+      username: user.username,
+      league: user.league,
+      totalEarned: user.total_earned_usdc,
+      totalChallenges: user.challenges_played,
+      avatarUrl: user.avatar_url,
+    },
+  });
+});
+
+/**
  * PATCH /users/me/wallet
- * Associate a Stellar wallet address with the user account.
+...
+
  */
 router.patch("/me/wallet", authenticate, async (req, res) => {
   const { stellarAddress } = z
