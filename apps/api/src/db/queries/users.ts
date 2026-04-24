@@ -4,6 +4,8 @@ export interface User {
   id: string;
   email: string;
   google_id: string | null;
+  display_name: string;
+  username: string | null;
   phone_hash: string | null;
   phone_verified: boolean;
   age_verified: boolean;
@@ -11,6 +13,10 @@ export interface User {
   stellar_address: string | null;
   embedded_wallet_address: string | null;
   avatar_url: string | null;
+  league: "bronze" | "silver" | "gold" | null;
+  total_score: number;
+  total_earned_usdc: string;
+  challenges_played: number;
   state_code: string | null;
   streak: number;
   last_play_day: string | null;
@@ -18,6 +24,15 @@ export interface User {
   streak_repair_available: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicUser {
+  display_name: string;
+  username: string;
+  league: "bronze" | "silver" | "gold" | null;
+  total_earned_usdc: string;
+  challenges_played: number;
+  avatar_url: string | null;
 }
 
 export async function findUserByEmail(email: string): Promise<User | null> {
@@ -32,6 +47,16 @@ export async function findUserByGoogleId(googleId: string): Promise<User | null>
 
 export async function findUserById(id: string): Promise<User | null> {
   const result = await query<User>("SELECT * FROM users WHERE id = $1 LIMIT 1", [id]);
+  return result.rows[0] ?? null;
+}
+
+export async function getUserPublicProfileByUsername(username: string): Promise<PublicUser | null> {
+  const result = await query<PublicUser>(
+    `SELECT display_name, username, league, total_earned_usdc, challenges_played, avatar_url
+     FROM users
+     WHERE username = $1`,
+    [username]
+  );
   return result.rows[0] ?? null;
 }
 
