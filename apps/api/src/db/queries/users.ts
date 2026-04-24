@@ -1,9 +1,14 @@
 import { query } from "../index";
 
 export interface User {
+  username: any;
+  display_name: any;
   id: string;
   email: string;
   google_id: string | null;
+  display_name: string;
+  username: string | null;
+  role: string;
   phone_hash: string | null;
   phone_verified: boolean;
   age_verified: boolean;
@@ -11,6 +16,10 @@ export interface User {
   stellar_address: string | null;
   embedded_wallet_address: string | null;
   avatar_url: string | null;
+  league: "bronze" | "silver" | "gold" | null;
+  total_score: number;
+  total_earned_usdc: string;
+  challenges_played: number;
   state_code: string | null;
   streak: number;
   last_play_day: string | null;
@@ -18,6 +27,15 @@ export interface User {
   streak_repair_available: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface PublicUser {
+  display_name: string;
+  username: string;
+  league: "bronze" | "silver" | "gold" | null;
+  total_earned_usdc: string;
+  challenges_played: number;
+  avatar_url: string | null;
 }
 
 export async function findUserByEmail(email: string): Promise<User | null> {
@@ -35,21 +53,33 @@ export async function findUserById(id: string): Promise<User | null> {
   return result.rows[0] ?? null;
 }
 
+export async function getUserPublicProfileByUsername(username: string): Promise<PublicUser | null> {
+  const result = await query<PublicUser>(
+    `SELECT display_name, username, league, total_earned_usdc, challenges_played, avatar_url
+     FROM users
+     WHERE username = $1`,
+    [username]
+  );
+  return result.rows[0] ?? null;
+}
+
 export async function upsertUser(data: {
   email: string;
   googleId: string;
   name?: string;
   avatarUrl?: string;
 }): Promise<User> {
+  const displayName = data.name?.trim() || data.email.split("@")[0];
   const result = await query<User>(
-    `INSERT INTO users (email, google_id, avatar_url)
-     VALUES ($1, $2, $3)
+    `INSERT INTO users (email, google_id, display_name, avatar_url)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (google_id) DO UPDATE
        SET email = EXCLUDED.email,
+           display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), users.display_name),
            avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
            updated_at = NOW()
      RETURNING *`,
-    [data.email, data.googleId, data.avatarUrl ?? null]
+    [data.email, data.googleId, displayName, data.avatarUrl ?? null]
   );
   return result.rows[0];
 }

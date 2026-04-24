@@ -3,14 +3,19 @@ import path from "node:path";
 import { defineProject } from "vitest/config";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
-const sharedSetupFile = path.resolve(projectRoot, "../../tests/setup.ts");
 
 export default defineProject({
+  resolve: {
+    alias: {
+      "@": path.resolve(projectRoot, "./src"),
+    },
+  },
   test: {
     name: "@brandblitz/web",
     root: projectRoot,
+    globals: true,
     environment: "jsdom",
-    setupFiles: [sharedSetupFile],
+    setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     coverage: {
       provider: "v8",
