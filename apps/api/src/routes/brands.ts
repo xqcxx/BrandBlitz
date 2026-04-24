@@ -12,9 +12,10 @@ import {
   insertChallengeQuestions,
 } from "../db/queries/challenges";
 import { generateChallengeQuestions } from "../services/questions";
-import { optimizeImage } from "@brandblitz/storage";
+import { optimizeImage, StorageError } from "@brandblitz/storage";
 import { authenticate } from "../middleware/authenticate";
 import { createError } from "../middleware/error";
+import { config } from "../lib/config";
 
 const router = Router();
 
@@ -69,20 +70,28 @@ router.post("/", authenticate, async (req, res) => {
   let productImage2Url: string | undefined;
 
   // Optimize uploaded images server-side (converts to WebP, resizes)
-  if (body.logoKey) {
-    const optimizedKey = await optimizeImage(body.logoKey, "brand-logo");
-    const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
-    logoUrl = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
-  }
-  if (body.productImage1Key) {
-    const optimizedKey = await optimizeImage(body.productImage1Key, "product-image");
-    const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
-    productImage1Url = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
-  }
-  if (body.productImage2Key) {
-    const optimizedKey = await optimizeImage(body.productImage2Key, "product-image");
-    const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
-    productImage2Url = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
+  try {
+    if (body.logoKey) {
+      const optimizedKey = await optimizeImage(body.logoKey, "brand-logo");
+      const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
+      logoUrl = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
+    }
+    if (body.productImage1Key) {
+      const optimizedKey = await optimizeImage(body.productImage1Key, "product-image");
+      const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
+      productImage1Url = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
+    }
+    if (body.productImage2Key) {
+      const optimizedKey = await optimizeImage(body.productImage2Key, "product-image");
+      const { getPublicUrl, BUCKETS } = await import("@brandblitz/storage");
+      productImage2Url = getPublicUrl(BUCKETS.BRAND_ASSETS, optimizedKey);
+    }
+  } catch (error) {
+    if (error instanceof StorageError || (error as any).name === "StorageError") {
+      console.error(`[api] Image optimization failed for body key. Reason: ${(error as Error).message}`);
+      throw createError("Image upload could not be processed. Please try again with a valid image.", 400);
+    }
+    throw error;
   }
 
   const brand = await createBrand({
@@ -129,7 +138,7 @@ router.post("/challenges", authenticate, async (req, res) => {
   res.status(201).json({
     challenge,
     depositInstructions: {
-      hotWalletAddress: process.env.HOT_WALLET_PUBLIC_KEY,
+      hotWalletAddress: config.HOT_WALLET_PUBLIC_KEY,
       memo: challengeId,
       amount: body.poolAmountUsdc,
       asset: "USDC",

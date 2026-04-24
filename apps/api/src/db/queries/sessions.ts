@@ -33,7 +33,6 @@ export interface LeaderboardSession extends GameSession {
   avatar_url: string;
   stellar_address: string | null;
 }
-
 export async function createSession(data: {
   userId: string;
   challengeId: string;

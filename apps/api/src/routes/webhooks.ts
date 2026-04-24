@@ -4,6 +4,9 @@ import {
   updateChallengeStatus,
 } from "../db/queries/challenges";
 import { logger } from "../lib/logger";
+import { config } from "../lib/config";
+
+import { webhookLimiter } from "../middleware/rate-limit";
 
 const router = Router();
 
@@ -15,9 +18,9 @@ const router = Router();
  * This endpoint is internal only — not exposed to the public internet.
  * Protected by a shared secret in the X-Webhook-Secret header.
  */
-router.post("/stellar/deposit", async (req, res) => {
+router.post("/stellar/deposit", webhookLimiter, async (req, res) => {
   const secret = req.headers["x-webhook-secret"];
-  if (secret !== process.env.WEBHOOK_SECRET) {
+  if (secret !== config.WEBHOOK_SECRET) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -36,7 +39,7 @@ router.post("/stellar/deposit", async (req, res) => {
   const challenge = await getChallengeByMemo(memo);
   if (!challenge) {
     logger.warn("Deposit received for unknown challenge memo", { memo, txHash });
-    res.json({ status: "unknown_memo" });
+    res.status(404).json({ error: "Unknown memo" });
     return;
   }
 
