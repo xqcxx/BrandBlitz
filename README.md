@@ -345,8 +345,10 @@ See [`.env.example`](./.env.example) for all variables with inline documentation
 | `GOOGLE_CLIENT_ID/SECRET` | Google OAuth credentials |
 | `STELLAR_HOT_WALLET_SECRET` | Stellar keypair for payouts |
 | `STELLAR_NETWORK` | `testnet` or `public` |
-| `S3_*` | Storage endpoint, credentials, bucket |
+| `S3_*` | Storage endpoint, credentials, bucket (`S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`) |
 | `WEBHOOK_SECRET` | Protects `/webhooks/stellar` |
+| `PHONE_HASH_SALT` | HMAC salt for phone-number hashing (32-byte random) |
+| `NEXTAUTH_API_URL` | Internal URL next-auth uses to reach the API (e.g. `http://localhost/api`) |
 
 ---
 
