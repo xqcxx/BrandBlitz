@@ -37,6 +37,35 @@ redis.on("connect", () => {
   logger.info("Redis connected");
 });
 
+// Poll Redis INFO stats every 60 s and emit redis_evicted_keys_total so that
+// a non-zero value can trigger an alert — silent eviction of BullMQ jobs must
+// never go unnoticed (see docs/infrastructure/redis.md).
+let _lastEvictedKeys = 0;
+
+export function startRedisEvictionMonitor(intervalMs = 60_000): NodeJS.Timeout {
+  return setInterval(async () => {
+    try {
+      const info = await redis.info("stats");
+      const match = info.match(/evicted_keys:(\d+)/);
+      if (!match) return;
+
+      const total = parseInt(match[1], 10);
+      const delta = total - _lastEvictedKeys;
+      _lastEvictedKeys = total;
+
+      if (delta > 0) {
+        logger.warn("redis_evicted_keys_total", {
+          metric: "redis_evicted_keys_total",
+          value: delta,
+          total,
+        });
+      }
+    } catch {
+      // Non-fatal — connection errors are already logged by the error handler.
+    }
+  }, intervalMs);
+}
+
 export async function connectRedis(): Promise<void> {
   await redis.connect();
 }

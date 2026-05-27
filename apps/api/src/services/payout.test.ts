@@ -244,8 +244,8 @@ describe("processPayout", () => {
 
     await processPayout("challenge-3");
 
-    expect(mocks.updatePayoutStatus).toHaveBeenCalledWith("payout-user-1", "failed", undefined);
-    expect(mocks.updatePayoutStatus).toHaveBeenCalledWith("payout-user-2", "failed", undefined);
+    expect(mocks.updatePayoutStatus).toHaveBeenCalledWith("payout-user-1", "failed", undefined, "tx_failed");
+    expect(mocks.updatePayoutStatus).toHaveBeenCalledWith("payout-user-2", "failed", undefined, "tx_failed");
     expect(mocks.updateChallengeStatus).toHaveBeenCalledWith("challenge-3", "payout_failed", undefined);
   });
 
@@ -331,5 +331,67 @@ describe("processPayout", () => {
 
     expect(mocks.submitBatchPayout).toHaveBeenCalledTimes(1);
     expect(mocks.metricsInc).not.toHaveBeenCalledWith("antiCheat.integrity_hmac_tampered_total");
+  });
+
+  it("failed payout always carries a non-empty error message from the Stellar result", async () => {
+    mocks.getChallengeById.mockResolvedValue({ ...challengeFixture, id: "challenge-msg-1" });
+    mocks.getLeaderboard.mockResolvedValue([
+      buildLeaderboardSession({ id: "session-1", user_id: "user-1", total_score: 100, stellar_address: "GUSER1" }),
+    ]);
+    mocks.submitBatchPayout.mockResolvedValue([
+      {
+        txHash: "",
+        recipients: [{ address: "GUSER1", amount: "90.0000000" }],
+        success: false,
+        error: "horizon: transaction timed out",
+      },
+    ]);
+
+    await processPayout("challenge-msg-1");
+
+    const [, status, , errorMessage] = mocks.updatePayoutStatus.mock.calls[0] as [string, string, string, string];
+    expect(status).toBe("failed");
+    expect(errorMessage).toBeTruthy();
+    expect(errorMessage.length).toBeGreaterThan(0);
+  });
+
+  it("failed payout uses a fallback message when Stellar result carries no error field", async () => {
+    mocks.getChallengeById.mockResolvedValue({ ...challengeFixture, id: "challenge-msg-2" });
+    mocks.getLeaderboard.mockResolvedValue([
+      buildLeaderboardSession({ id: "session-1", user_id: "user-1", total_score: 100, stellar_address: "GUSER1" }),
+    ]);
+    mocks.submitBatchPayout.mockResolvedValue([
+      {
+        txHash: "",
+        recipients: [{ address: "GUSER1", amount: "90.0000000" }],
+        success: false,
+        // no error field — service must supply a fallback
+      },
+    ]);
+
+    await processPayout("challenge-msg-2");
+
+    const [, status, , errorMessage] = mocks.updatePayoutStatus.mock.calls[0] as [string, string, string, string];
+    expect(status).toBe("failed");
+    expect(errorMessage).toBeTruthy();
+    expect(errorMessage.length).toBeGreaterThan(0);
+  });
+
+  it("successful payout writes an empty error_message so the CHECK constraint is satisfied", async () => {
+    mocks.getLeaderboard.mockResolvedValue([
+      buildLeaderboardSession({
+        id: "session-ok2",
+        user_id: "user-1",
+        total_score: 300,
+        stellar_address: "GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF",
+      }),
+    ]);
+
+    await processPayout("challenge-1");
+
+    // updatePayoutStatus called with status "sent" and no error message (undefined → db writes "")
+    const [, status, , errorMessage] = mocks.updatePayoutStatus.mock.calls[0] as [string, string, string, string | undefined];
+    expect(status).toBe("sent");
+    expect(errorMessage).toBeUndefined();
   });
 });

@@ -53,8 +53,7 @@ CREATE TABLE brands (
   brand_story         TEXT,
   usp                 TEXT,
   logo_url            TEXT,
-  product_image_1_url TEXT,
-  product_image_2_url TEXT,
+  product_image_keys  TEXT[] NOT NULL DEFAULT '{}',
   primary_color       TEXT DEFAULT '#6366f1',
   secondary_color     TEXT DEFAULT '#a5b4fc',
   deleted_at          TIMESTAMPTZ,
@@ -155,21 +154,22 @@ CREATE TABLE game_sessions (
 
 CREATE INDEX idx_game_sessions_challenge_id ON game_sessions (challenge_id);
 CREATE INDEX idx_game_sessions_user_id      ON game_sessions (user_id);
+CREATE INDEX idx_game_sessions_user_id_completed_at ON game_sessions (user_id, completed_at DESC);
 CREATE INDEX idx_game_sessions_status       ON game_sessions (status);
 CREATE INDEX idx_game_sessions_total_score  ON game_sessions (challenge_id, total_score DESC NULLS LAST)
   WHERE status = 'completed';
 
 CREATE TABLE session_round_scores (
-  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id  UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
-  round       INTEGER NOT NULL CHECK (round IN (1, 2, 3)),
-  score       INTEGER NOT NULL CHECK (score >= 0),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (session_id, round)
+  session_id       UUID NOT NULL REFERENCES game_sessions(id) ON DELETE CASCADE,
+  round            INTEGER NOT NULL CHECK (round IN (1, 2, 3)),
+  answer           TEXT,
+  score            INTEGER NOT NULL CHECK (score >= 0),
+  reaction_time_ms INTEGER,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (session_id, round)
 );
 
-CREATE INDEX idx_session_round_scores_session_id ON session_round_scores (session_id);
+CREATE INDEX idx_round_scores_session ON session_round_scores (session_id);
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- PAYOUTS
@@ -183,10 +183,12 @@ CREATE TABLE payouts (
   status           TEXT NOT NULL DEFAULT 'pending'
                      CHECK (status IN ('pending', 'processing', 'completed', 'failed')),
   tx_hash          TEXT,
-  error_message    TEXT,
+  error_message    TEXT NOT NULL DEFAULT '',
   created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (challenge_id, user_id)
+  UNIQUE (challenge_id, user_id),
+  CONSTRAINT payouts_failed_requires_message
+    CHECK ((status = 'failed') = (LENGTH(error_message) > 0))
 );
 
 CREATE INDEX idx_payouts_challenge_id ON payouts (challenge_id);
@@ -276,7 +278,7 @@ CREATE TRIGGER challenges_updated_at      BEFORE UPDATE ON challenges        FOR
 CREATE TRIGGER payouts_updated_at         BEFORE UPDATE ON payouts           FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER challenge_questions_updated_at BEFORE UPDATE ON challenge_questions FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER game_sessions_updated_at   BEFORE UPDATE ON game_sessions    FOR EACH ROW EXECUTE FUNCTION set_updated_at();
-CREATE TRIGGER session_round_scores_updated_at BEFORE UPDATE ON session_round_scores FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
 CREATE TRIGGER fraud_flags_updated_at     BEFORE UPDATE ON fraud_flags      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER league_assignments_updated_at BEFORE UPDATE ON league_assignments FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 CREATE TRIGGER user_badges_updated_at     BEFORE UPDATE ON user_badges      FOR EACH ROW EXECUTE FUNCTION set_updated_at();
