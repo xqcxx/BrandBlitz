@@ -97,8 +97,13 @@ router.get("/stream", async (req, res) => {
  * Cross-challenge leaderboard (cached in Redis, 5 min TTL).
  * Single aggregated query via ROW_NUMBER() — no N+1.
  */
-router.get("/global", async (_req, res) => {
-  const response = await cached("leaderboard:global", 300, async () => {
+router.get("/global", async (req, res) => {
+  const { limit, offset } = z.object({
+    limit: z.coerce.number().min(1).max(100).default(50),
+    offset: z.coerce.number().min(0).default(0),
+  }).parse(req.query);
+
+  const response = await cached(`leaderboard:global:${limit}:${offset}`, 300, async () => {
     const challenges = await getActiveChallenges(10);
     const challengeIds = challenges.map((c) => c.id);
     const topSessions = await getTopSessionsPerChallenge(challengeIds, 10);
@@ -120,7 +125,17 @@ router.get("/global", async (_req, res) => {
       };
     });
 
-    return { leaderboard: allSessions, cachedAt: new Date().toISOString() };
+    const leaderboard = allSessions.slice(offset, offset + limit);
+
+    return {
+      leaderboard,
+      cachedAt: new Date().toISOString(),
+      pagination: {
+        limit,
+        offset,
+        hasMore: offset + leaderboard.length < allSessions.length,
+      },
+    };
   });
 
   res.json(response);

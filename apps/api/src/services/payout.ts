@@ -3,6 +3,7 @@ import type { NetworkName } from "@brandblitz/stellar";
 import { getLeaderboard } from "../db/queries/sessions";
 import { getChallengeById, updateChallengeStatus } from "../db/queries/challenges";
 import { createPayout, updatePayoutStatus } from "../db/queries/payouts";
+import { incrementUserEarnings } from "../db/queries/users";
 import { rankWinners } from "./scoring";
 import { calculatePayoutShareStroops, stroopsToUsdc } from "../lib/usdc";
 import { payoutJobOptions, payoutQueue } from "../queues/payout.queue";
@@ -84,7 +85,7 @@ export async function processPayout(challengeId: string): Promise<void> {
 
   const totalPoints = eligibleWinners.reduce((acc, s) => acc + s.totalScore, 0);
   const recipients: PayoutRecipient[] = [];
-  const payoutRecords: { id: string; address: string }[] = [];
+  const payoutRecords: { id: string; address: string; userId: string; amount: string }[] = [];
 
   for (const winner of eligibleWinners) {
     const amountStroops = calculatePayoutShareStroops(
@@ -106,7 +107,12 @@ export async function processPayout(challengeId: string): Promise<void> {
     });
 
     recipients.push({ address: winner.stellarAddress, amount });
-    payoutRecords.push({ id: payout.id, address: winner.stellarAddress });
+    payoutRecords.push({
+      id: payout.id,
+      address: winner.stellarAddress,
+      userId: winner.userId,
+      amount,
+    });
   }
 
   if (recipients.length === 0) {
@@ -144,6 +150,9 @@ export async function processPayout(challengeId: string): Promise<void> {
       const record = payoutRecords.find((candidate) => candidate.address === recipient.address);
       if (record) {
         await updatePayoutStatus(record.id, status, result.txHash || undefined, errorMessage);
+        if (result.success) {
+          await incrementUserEarnings(record.userId, record.amount);
+        }
       }
     }
 

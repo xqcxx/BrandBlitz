@@ -41,7 +41,7 @@ export interface GameSession {
   id: string;
   userId: string;
   challengeId: string;
-  status: "warmup" | "active" | "completed" | "flagged";
+  status: "warmup" | "active" | "completed" | "flagged" | "abandoned";
   warmupStartedAt?: string;
   challengeStartedAt?: string;
   completedAt?: string;

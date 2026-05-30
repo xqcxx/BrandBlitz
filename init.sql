@@ -17,7 +17,6 @@ CREATE TABLE users (
   kyc_complete      BOOLEAN NOT NULL DEFAULT FALSE,
   stellar_address   TEXT,
   embedded_wallet_address TEXT,
-  muxed_id          BIGINT,
   phone_hash        TEXT UNIQUE,
   phone_verified    BOOLEAN NOT NULL DEFAULT FALSE,
   phone_verified_at TIMESTAMPTZ,
@@ -40,8 +39,6 @@ CREATE INDEX idx_users_google_id    ON users (google_id);
 CREATE INDEX idx_users_phone_hash   ON users (phone_hash);
 CREATE INDEX idx_users_total_score  ON users (total_score DESC);
 CREATE INDEX idx_users_league       ON users (league);
-CREATE UNIQUE INDEX users_muxed_id_unique ON users (muxed_id) WHERE muxed_id IS NOT NULL;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- BRANDS
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -130,7 +127,7 @@ CREATE TABLE game_sessions (
   device_id             TEXT,
   ip_address            INET,
   status                TEXT NOT NULL DEFAULT 'warmup'
-                          CHECK (status IN ('warmup', 'active', 'completed', 'flagged')),
+                          CHECK (status IN ('warmup', 'active', 'completed', 'flagged', 'abandoned')),
   is_practice           BOOLEAN NOT NULL DEFAULT FALSE,
   warmup_started_at     TIMESTAMPTZ,
   warmup_completed_at   TIMESTAMPTZ,

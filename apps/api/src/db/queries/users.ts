@@ -1,4 +1,5 @@
-import { query } from "../index";
+import type { PoolClient } from "pg";
+import { pool, query } from "../index";
 
 export interface User {
   id: string;
@@ -58,6 +59,44 @@ export async function findUserByPhoneHash(phoneHash: string): Promise<User | nul
   return result.rows[0] ?? null;
 }
 
+function slugifyUsername(value: string): string {
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 24);
+}
+
+async function allocateUsername(
+  client: PoolClient,
+  displayName: string,
+  email: string
+): Promise<string> {
+  const base = slugifyUsername(displayName) || slugifyUsername(email.split("@")[0] ?? "") || "player";
+  const prefix = `${base}-%`;
+  const result = await client.query<{ username: string }>(
+    `SELECT username
+     FROM users
+     WHERE username = $1 OR username LIKE $2`,
+    [base, prefix]
+  );
+
+  const taken = new Set(result.rows.map((row) => row.username));
+  if (!taken.has(base)) {
+    return base;
+  }
+
+  let suffix = 2;
+  while (taken.has(`${base}-${suffix}`)) {
+    suffix += 1;
+  }
+
+  return `${base}-${suffix}`;
+}
+
 export async function getUserPublicProfileByUsername(username: string): Promise<PublicUser | null> {
   const result = await query<PublicUser>(
     `SELECT display_name, username, league, total_earned_usdc, challenges_played, avatar_url, streak
@@ -76,18 +115,38 @@ export async function upsertUser(data: {
 }): Promise<User> {
   const displayName = data.name?.trim() || data.email.split("@")[0] || "BrandBlitz User";
 
-  const result = await query<User>(
-    `INSERT INTO users (email, google_id, display_name, avatar_url)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (google_id) DO UPDATE
-       SET email = EXCLUDED.email,
-           display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), users.display_name),
-           avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
-           updated_at = NOW()
-     RETURNING *`,
-    [data.email, data.googleId, displayName, data.avatarUrl ?? null]
-  );
-  return result.rows[0];
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const client = await pool.connect();
+
+    try {
+      await client.query("BEGIN");
+      const username = await allocateUsername(client, displayName, data.email);
+      const result = await client.query<User>(
+        `INSERT INTO users (email, google_id, display_name, username, avatar_url)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (google_id) DO UPDATE
+           SET email = EXCLUDED.email,
+               display_name = COALESCE(NULLIF(EXCLUDED.display_name, ''), users.display_name),
+               username = COALESCE(users.username, EXCLUDED.username),
+               avatar_url = COALESCE(EXCLUDED.avatar_url, users.avatar_url),
+               updated_at = NOW()
+         RETURNING *`,
+        [data.email, data.googleId, displayName, username, data.avatarUrl ?? null]
+      );
+      await client.query("COMMIT");
+      return result.rows[0];
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (attempt < 2 && error instanceof Error && "code" in error && (error as { code?: string }).code === "23505") {
+        continue;
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
+
+  throw new Error("Unable to allocate username");
 }
 
 export async function updateUserWallet(
@@ -97,6 +156,16 @@ export async function updateUserWallet(
   await query(
     "UPDATE users SET stellar_address = $1, updated_at = NOW() WHERE id = $2",
     [stellarAddress, userId]
+  );
+}
+
+export async function incrementUserEarnings(userId: string, amountUsdc: string): Promise<void> {
+  await query(
+    `UPDATE users
+     SET total_earned_usdc = total_earned_usdc + $1::numeric,
+         updated_at = NOW()
+     WHERE id = $2`,
+    [amountUsdc, userId]
   );
 }
 
