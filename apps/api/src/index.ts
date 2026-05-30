@@ -8,6 +8,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { registerRoutes } from "./routes";
 import { errorHandler } from "./middleware/error";
+import { referralAttributionMiddleware } from "./middleware/referral-attribution";
 import { apiLimiter } from "./middleware/rate-limit";
 import { connectDb, closeDb } from "./db";
 import { connectRedis, redis } from "./lib/redis";
@@ -26,18 +27,22 @@ app.use(
   cors({
     origin: config.WEB_URL,
     credentials: true,
-  })
+  }),
 );
 app.use(cookieParser());
+app.use(referralAttributionMiddleware);
 app.use(
   express.json({
     limit: "1mb",
     verify: (req, _res, buf) => {
-      if (req.headers["x-webhook-signature"] || req.path.startsWith("/webhooks")) {
+      if (
+        req.headers["x-webhook-signature"] ||
+        req.path.startsWith("/webhooks")
+      ) {
         (req as any).rawBody = buf;
       }
     },
-  })
+  }),
 );
 app.use(express.urlencoded({ extended: true }));
 
@@ -50,7 +55,11 @@ app.get("/health", (_req, res) => {
     res.status(503).json({ status: "shutting_down" });
     return;
   }
-  res.json({ status: "ok", uptime: process.uptime(), timestamp: new Date().toISOString() });
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ── API Routes ─────────────────────────────────────────────────────────────
